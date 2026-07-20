@@ -5,10 +5,10 @@ class ImessageBook < Formula
 
   if Hardware::CPU.arm?
     url "https://github.com/Shmoopi/imessage-book/releases/download/v#{version}/imessage-book-#{version}-aarch64-apple-darwin.tar.gz"
-    sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+    sha256 "61b3b60135b0b10fdb920c554e3fa1a88bd7d027f3f7bc648f72b972005ff5d2"
   else
     url "https://github.com/Shmoopi/imessage-book/releases/download/v#{version}/imessage-book-#{version}-x86_64-apple-darwin.tar.gz"
-    sha256 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    sha256 "7cc43a464251143b0025c08acff52972307298ce40c38d32a75501e10baf9235"
   end
 
   depends_on :macos
