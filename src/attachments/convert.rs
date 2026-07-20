@@ -273,7 +273,12 @@ mod tests {
         let jpeg = write("a.jpeg", &[0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, b'J', b'F']);
         let png = write("a.png", &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
         // HEIC 'ftyp heic' box — as Apple stores it under a `.jpeg` transfer name.
-        let heic = write("fake.jpeg", &[0, 0, 0, 0x18, b'f', b't', b'y', b'p', b'h', b'e', b'i', b'c']);
+        let heic = write(
+            "fake.jpeg",
+            &[
+                0, 0, 0, 0x18, b'f', b't', b'y', b'p', b'h', b'e', b'i', b'c',
+            ],
+        );
         assert!(content_is_jpeg_or_png(&jpeg));
         assert!(content_is_jpeg_or_png(&png));
         assert!(!content_is_jpeg_or_png(&heic)); // extension lies; bytes don't

@@ -1,7 +1,7 @@
 [package]
 name = "imessage-book"
-version = "1.0.4"
-edition = "2024"
+version = "1.0.5"
+edition = "2021"
 description = "Turn an iMessage conversation into a keepsake book — HTML, PDF, EPUB, JSON, or Markdown, with photos, stats, and Messages-style bubbles."
 repository = "https://github.com/Shmoopi/imessage-book"
 homepage = "https://github.com/Shmoopi/imessage-book"

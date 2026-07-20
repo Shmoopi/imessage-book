@@ -61,8 +61,10 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Releasing **$TAG** (version \`$VERSION\`)" >> "$GITHUB_STEP_SUMMARY"
 
-  # Build a release binary per macOS architecture on a native runner, then
-  # package it into a tarball + .sha256 uploaded as a build artifact.
+  # Build a release binary for each macOS architecture, then package it into a
+  # tarball + .sha256 uploaded as a build artifact. Both targets build on an Apple
+  # Silicon runner — aarch64 natively and x86_64 cross-compiled — because GitHub has
+  # retired the Intel `macos-13` runners, so a native x86_64 job never gets scheduled.
   build:
     name: Build ${{ matrix.target }}
     needs: setup
@@ -71,10 +73,10 @@ jobs:
       matrix:
         include:
           - target: aarch64-apple-darwin
-            os: macos-14 # Apple Silicon runner
+            cross: false
           - target: x86_64-apple-darwin
-            os: macos-13 # Intel runner
-    runs-on: ${{ matrix.os }}
+            cross: true
+    runs-on: macos-14 # Apple Silicon; cross-compiles the x86_64 target
     steps:
       - uses: actions/checkout@v4
         with:
@@ -88,8 +90,20 @@ jobs:
       - name: Build
         run: cargo build --release --locked --target ${{ matrix.target }}
       - name: Smoke test
-        # Each target's runner is that same architecture, so the binary runs natively.
-        run: ./target/${{ matrix.target }}/release/${BINARY} --version
+        # Always verify the binary's architecture. Run --version natively for the host
+        # arch; for the cross-compiled target use Rosetta if present, otherwise skip.
+        run: |
+          set -euo pipefail
+          bin="target/${{ matrix.target }}/release/${BINARY}"
+          file "$bin"
+          lipo -archs "$bin"
+          if [ "${{ matrix.cross }}" != "true" ]; then
+            "$bin" --version
+          elif arch -x86_64 /usr/bin/true 2>/dev/null; then
+            echo "Running under Rosetta:"; arch -x86_64 "$bin" --version
+          else
+            echo "Rosetta unavailable; skipping native run for ${{ matrix.target }} (arch verified above)."
+          fi
       - name: Package
         id: package
         env:
