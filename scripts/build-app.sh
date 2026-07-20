@@ -14,7 +14,7 @@
 #   CODESIGN_IDENTITY  signing identity for codesign (default: - , i.e. ad-hoc)
 #   DIST_DIR           output directory              (default: <repo>/dist)
 #   UNIVERSAL          1 = universal engine (arm64 + x86_64), 0 = this Mac only (faster;
-#                      handy for local iteration and CI smoke tests)   (default: 1)
+#                      handy for local iteration)   (default: 1)
 #
 set -euo pipefail
 

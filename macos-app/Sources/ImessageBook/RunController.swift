@@ -65,18 +65,18 @@ final class RunController: ObservableObject {
             let data = handle.availableData
             if data.isEmpty { handle.readabilityHandler = nil; return }
             let text = String(decoding: data, as: UTF8.self)
-            Task { @MainActor in self?.ingest(text, isError: false) }
+            Task { @MainActor [weak self] in self?.ingest(text, isError: false) }
         }
         stderr.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             if data.isEmpty { handle.readabilityHandler = nil; return }
             let text = String(decoding: data, as: UTF8.self)
-            Task { @MainActor in self?.ingest(text, isError: true) }
+            Task { @MainActor [weak self] in self?.ingest(text, isError: true) }
         }
         process.terminationHandler = { [weak self] proc in
             let status = proc.terminationStatus
             let reason = proc.terminationReason
-            Task { @MainActor in self?.finish(status: status, reason: reason) }
+            Task { @MainActor [weak self] in self?.finish(status: status, reason: reason) }
         }
 
         do {
