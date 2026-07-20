@@ -1,7 +1,7 @@
 class ImessageBook < Formula
   desc "Turn an iMessage conversation into a keepsake book"
   homepage "https://github.com/Shmoopi/imessage-book"
-  version "1.0.0"
+  version "1.0.1"
 
   if Hardware::CPU.arm?
     url "https://github.com/Shmoopi/imessage-book/releases/download/v#{version}/imessage-book-#{version}-aarch64-apple-darwin.tar.gz"
