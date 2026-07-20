@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # ubuntu proves the crate builds off macOS (iOS-backup workflows);
+        # macos exercises the sips/Tectonic paths.
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --all
+
+  gui:
+    name: macOS app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: gui
+      # Compile the SwiftUI package on its own first, so a Swift-only break is a clear,
+      # fast failure before the slower full-bundle assembly.
+      - name: Build SwiftUI package
+        run: swift build -c release --package-path macos-app
+      # Then exercise the whole packaging pipeline: engine → icon → .app → code sign.
+      # UNIVERSAL=0 keeps it to the runner's architecture (the release workflow ships the
+      # universal build).
+      - name: Assemble app bundle
+        run: UNIVERSAL=0 scripts/build-app.sh
+      - name: Verify bundle
+        run: |
+          set -euo pipefail
+          codesign --verify --strict --verbose=2 dist/ImessageBook.app
+          test -f dist/ImessageBook.app/Contents/Resources/AppIcon.icns
+          dist/ImessageBook.app/Contents/Resources/imessage-book --version

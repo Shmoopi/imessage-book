@@ -1,7 +1,13 @@
 [package]
-name = "message-book"
-version = "0.1.0"
-edition = "2021"
+name = "imessage-book"
+version = "1.0.0"
+edition = "2026"
+description = "Turn an iMessage conversation into a keepsake book — HTML, PDF, EPUB, JSON, or Markdown, with photos, stats, and Messages-style bubbles."
+repository = "https://github.com/Shmoopi/imessage-book"
+homepage = "https://github.com/Shmoopi/imessage-book"
+readme = "README.md"
+keywords = ["imessage", "chat", "export", "backup", "pdf"]
+categories = ["command-line-utilities", "text-processing"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -12,3 +18,15 @@ clap = { version = "4.4.18", features = ["derive", "string"] }
 imessage-database = "1.8.0"
 regex = "1.10.3"
 rusqlite = { version = "0.30.0", features = ["array"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+unicode-segmentation = "1"
+minijinja = { version = "2", features = ["custom_syntax"] }
+toml = "0.8"
+tiny_http = "0.12"
+open = "5"
+rayon = "1"
+epub-builder = "0.7"
+
+[dev-dependencies]
+tempfile = "3"

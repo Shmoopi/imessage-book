@@ -1,0 +1,32 @@
+# imessage-book configuration. Every field is optional.
+
+title = "Our Conversation"
+author = "Your Name"
+dedication = "Dedicated to you."
+# cover_image = "~/Pictures/cover.jpg"   # shown on the title page
+gallery = false                          # append a grid of every photo
+
+# emoji_font = "Noto Emoji"
+
+[page]
+size = "6x9"        # letter | a4 | a5 | 6x9 | 5x8 | 7x10 | 8.5x11
+margin_in = 0.75
+
+[theme]
+me_color = "0B93F6"
+them_color = "E5E5EA"
+sms_color = "34C759"
+# font = "Palatino"
+
+[format]
+gap_minutes = 60    # minimum same-day silence before a "… later" marker
+chapters = "month"  # month | year | week
+
+[privacy]
+exclude_handles = []   # e.g. ["+15550000000"] — omit these people's messages
+redact = []            # e.g. ["password"] — mask these words wherever they appear
+hide_attachments = false
+
+# Friendly names for group-chat participants, keyed by phone/email.
+[names]
+# "+15555555555" = "Naomi"

@@ -1,2 +1,10 @@
 /target
 /output
+/sample-out
+/tex
+.DS_Store
+
+# macOS GUI build artifacts
+/dist
+/macos-app/.build
+/macos-app/.swiftpm

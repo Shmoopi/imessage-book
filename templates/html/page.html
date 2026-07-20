@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }}</title>
+<style>
+  :root {
+    --blue: #{{ theme.me_color }};
+    --gray: #{{ theme.them_color }};
+    --green: #{{ theme.sms_color }};
+    --bg: #ffffff;
+    --muted: #{{ theme.meta_color }};
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: #000;
+  }
+  header.book {
+    text-align: center;
+    padding: 48px 16px 8px;
+    border-bottom: 1px solid #eee;
+  }
+  header.book h1 { font-size: 28px; margin: 0 0 4px; }
+  header.book .byline, header.book .dedication { color: var(--muted); font-size: 14px; }
+  header.book .dedication { font-style: italic; margin-top: 8px; }
+  main { max-width: 720px; margin: 0 auto; padding: 16px; }
+  .searchbar {
+    position: sticky; top: 0; z-index: 4; padding: 8px 16px;
+    background: rgba(255,255,255,0.95); backdrop-filter: blur(6px);
+    border-bottom: 1px solid #eee; text-align: center;
+  }
+  .searchbar input {
+    width: 100%; max-width: 720px; padding: 8px 12px; font-size: 14px;
+    border: 1px solid #ddd; border-radius: 18px; outline: none;
+  }
+  .searchbar .count { font-size: 12px; color: var(--muted); margin-top: 4px; min-height: 14px; }
+  nav.toc { display: none; }
+  @media (min-width: 1180px) {
+    nav.toc {
+      display: block; position: fixed; top: 64px; left: 16px; width: 190px;
+      max-height: 80vh; overflow-y: auto; font-size: 13px; z-index: 3;
+    }
+    nav.toc .toc-title { font-weight: 700; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; }
+    nav.toc a { display: block; color: #333; text-decoration: none; padding: 3px 6px; border-radius: 6px; }
+    nav.toc a:hover { background: #f0f0f0; }
+  }
+  .chapter-title {
+    position: sticky; top: 44px; z-index: 2;
+    background: rgba(255,255,255,0.92); backdrop-filter: blur(6px);
+    font-size: 20px; font-weight: 700; padding: 14px 4px 8px; margin-top: 24px;
+    border-bottom: 1px solid #eee;
+  }
+  .day-heading, .gap { text-align: center; color: var(--muted); font-size: 12px; margin: 18px 0 10px; }
+  .gap { margin: 14px 0; font-style: italic; }
+  .row { display: flex; flex-direction: column; margin: 1px 0; }
+  .row.me { align-items: flex-end; }
+  .row.them { align-items: flex-start; }
+  .sender { font-size: 11px; color: var(--muted); margin: 8px 10px 1px; }
+  .bubble {
+    max-width: 68%; padding: 7px 12px; border-radius: 18px;
+    font-size: 15px; line-height: 1.3; word-wrap: break-word;
+  }
+  /* Only the message text preserves its own line breaks — not the template's. */
+  .bubble .text { white-space: pre-wrap; }
+  .bubble a { color: inherit; text-decoration: underline; text-underline-offset: 2px; word-break: break-word; }
+  .row.them .bubble a { color: #0b62c9; }
+  .row.me .bubble { background: var(--blue); color: #fff; border-bottom-right-radius: 5px; }
+  .row.them .bubble { background: var(--gray); color: #000; border-bottom-left-radius: 5px; }
+  .row.me .bubble.sms { background: var(--green); }
+  /* A photo *is* its own bubble: rounded corners, no colored frame around it. */
+  .photo { display: block; max-width: 62%; max-height: 360px; border-radius: 18px; margin: 1px 0; }
+  img.photo.lb { cursor: zoom-in; }
+  video.photo { max-width: 62%; max-height: 360px; width: auto; background: #000; }
+  .photo-wrap { position: relative; display: inline-block; line-height: 0; margin: 1px 0; }
+  .photo-wrap .photo { margin: 0; }
+  .play {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    width: 46px; height: 46px; border-radius: 50%; background: rgba(0,0,0,0.4);
+    pointer-events: none;
+  }
+  .play::before {
+    content: ""; position: absolute; top: 50%; left: 55%; transform: translate(-50%,-50%);
+    border-style: solid; border-width: 9px 0 9px 15px;
+    border-color: transparent transparent transparent #fff;
+  }
+  .placeholder {
+    max-width: 68%; border: 1px dashed rgba(0,0,0,0.3); border-radius: 14px;
+    padding: 9px 12px; font-size: 13px; color: var(--muted); background: #fafafa;
+  }
+  .reply { font-size: 12px; color: var(--muted); font-style: italic; margin: 0 10px 2px; }
+  .app-tag { font-size: 12px; font-weight: 600; opacity: 0.85; margin-right: 4px; }
+  .meta { font-size: 10px; color: var(--muted); margin: 2px 12px 6px; }
+  /* Reaction pills tuck onto the bottom corner of the bubble, like Messages. */
+  .tapbacks { display: flex; gap: 4px; margin: -5px 6px 0; }
+  .tapback {
+    display: inline-block; background: #fff; border: 1px solid #e0e0e0; border-radius: 12px;
+    padding: 1px 8px; font-size: 11px; color: #333; box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+  }
+  .edited, .effect { font-style: italic; opacity: 0.7; }
+  header.book img.cover { max-width: 60%; max-height: 40vh; border-radius: 8px; margin-bottom: 16px; }
+  .system { text-align: center; color: var(--muted); font-size: 12px; font-style: italic; margin: 14px 0; }
+  .stats { max-width: 720px; margin: 0 auto; padding: 0 16px 8px; }
+  .stats h2 { font-size: 18px; }
+  .stats dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; font-size: 14px; }
+  .stats dt { font-weight: 600; color: var(--muted); }
+  .stats dd { margin: 0; }
+  /* Charts */
+  .charts { max-width: 720px; margin: 8px auto 8px; padding: 0 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .chart-card { border: 1px solid #eee; border-radius: 12px; padding: 12px 12px 10px; background: #fff; min-width: 0; }
+  .chart-card.wide { grid-column: 1 / -1; }
+  .chart-card h3 { font-size: 13px; margin: 0 0 8px; color: #333; }
+  .chart-sub { font-size: 11px; color: var(--muted); margin: 8px 0 0; }
+  .chart-body { min-width: 0; }
+  .mb-svg { width: 100%; height: auto; display: block; overflow: visible; }
+  .mb-bar { transition: opacity .12s; } .mb-bar:hover { opacity: .68; }
+  .mb-grid { stroke: #eee; stroke-width: 1; }
+  .mb-ylab, .mb-xlab { fill: var(--muted); font-size: 9px; }
+  .mb-heat-scroll { overflow-x: auto; padding-bottom: 4px; }
+  .mb-heat { display: block; }
+  .mb-heat rect { transition: opacity .12s; }
+  .mb-heat rect:hover { opacity: .7; }
+  .mb-donut-wrap { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .mb-donut { width: 124px; height: 124px; flex: 0 0 auto; }
+  .mb-donut circle { transition: opacity .12s; } .mb-donut circle:hover { opacity: .78; }
+  .mb-donut-num { font-size: 22px; font-weight: 700; fill: #333; }
+  .mb-donut-lab { font-size: 9px; fill: var(--muted); }
+  .mb-legend { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+  .mb-leg i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+  .mb-emoji { display: flex; flex-direction: column; gap: 5px; }
+  .mb-emoji-row { display: flex; align-items: center; gap: 8px; }
+  .mb-emoji-g { font-size: 18px; width: 24px; text-align: center; }
+  .mb-emoji-bar { flex: 1; background: #f0f0f0; border-radius: 6px; height: 10px; overflow: hidden; }
+  .mb-emoji-bar i { display: block; height: 100%; border-radius: 6px; }
+  .mb-emoji-n { font-size: 11px; color: var(--muted); width: 30px; text-align: right; }
+  .mb-tip {
+    position: fixed; z-index: 120; pointer-events: none;
+    background: rgba(0,0,0,0.82); color: #fff; font-size: 11px; padding: 4px 8px;
+    border-radius: 6px; transform: translate(-50%,-150%); white-space: nowrap;
+  }
+  @media (max-width: 640px) { .charts { grid-template-columns: 1fr; } }
+  .gallery { max-width: 720px; margin: 0 auto; padding: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .gallery img { width: 31%; border-radius: 8px; cursor: zoom-in; }
+  /* Lightbox */
+  .lightbox {
+    position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.9);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .lightbox[hidden] { display: none; }
+  .lightbox .lb-img { max-width: 92vw; max-height: 92vh; border-radius: 6px; box-shadow: 0 8px 40px rgba(0,0,0,0.5); }
+  .lightbox button {
+    position: absolute; background: rgba(255,255,255,0.12); color: #fff; border: none;
+    cursor: pointer; font-size: 26px; line-height: 44px; width: 44px; height: 44px; border-radius: 50%;
+  }
+  .lightbox button:hover { background: rgba(255,255,255,0.25); }
+  .lightbox .lb-close { top: 16px; right: 16px; }
+  .lightbox .lb-prev { left: 16px; top: 50%; transform: translateY(-50%); }
+  .lightbox .lb-next { right: 16px; top: 50%; transform: translateY(-50%); }
+</style>
+</head>
+<body>
+<header class="book">
+  {% if cover %}<img class="cover" src="{{ cover | safe }}" alt="cover">{% endif %}
+  <h1>{{ title }}</h1>
+  {% if author %}<div class="byline">Assembled by {{ author }}</div>{% endif %}
+  {% if dedication %}<div class="dedication">{{ dedication }}</div>{% endif %}
+</header>
+{% if stats %}
+<section class="stats">
+  <h2>By the numbers</h2>
+  <dl>
+    <dt>Messages</dt><dd>{{ stats.total }} ({{ stats.from_me }} from you, {{ stats.from_others }} received)</dd>
+    <dt>Span</dt><dd>{{ stats.first_date }} – {{ stats.last_date }} ({{ stats.days }} day{{ 's' if stats.days != 1 else '' }})</dd>
+    <dt>Active days</dt><dd>{{ stats.active_days }} day{{ 's' if stats.active_days != 1 else '' }} with messages</dd>
+    <dt>Words sent</dt><dd>{{ stats.words }}{% if stats.words_received %} (received {{ stats.words_received }}){% endif %}</dd>
+    {% if stats.avg_words %}<dt>Avg words / message</dt><dd>{{ stats.avg_words }}</dd>{% endif %}
+    {% if stats.longest_message_words %}<dt>Longest message</dt><dd>{{ stats.longest_message_words }} words</dd>{% endif %}
+    <dt>Photos</dt><dd>{{ stats.photos }}</dd>
+    {% if stats.videos %}<dt>Videos</dt><dd>{{ stats.videos }}</dd>{% endif %}
+    {% if stats.gifs %}<dt>GIFs</dt><dd>{{ stats.gifs }}</dd>{% endif %}
+    {% if stats.audio %}<dt>Voice / audio</dt><dd>{{ stats.audio }}</dd>{% endif %}
+    {% if stats.links %}<dt>Links shared</dt><dd>{{ stats.links }}</dd>{% endif %}
+    {% if stats.median_response_minutes is not none %}<dt>Typical reply time</dt><dd>{% set rm = stats.median_response_minutes %}{% if rm >= 60 %}{{ (rm / 60) | int }}h {{ rm % 60 }}m{% elif rm < 1 %}under a minute{% else %}{{ rm }} min{% endif %}</dd>{% endif %}
+    {% if stats.busiest_day %}<dt>Busiest day</dt><dd>{{ stats.busiest_day }}</dd>{% endif %}
+    {% if stats.busiest_hour %}<dt>Busiest hour</dt><dd>{{ stats.busiest_hour }}</dd>{% endif %}
+    {% if stats.longest_streak > 1 %}<dt>Longest streak</dt><dd>{{ stats.longest_streak }} days</dd>{% endif %}
+    {% if stats.top_emoji %}<dt>Top emoji</dt><dd>{% for e in stats.top_emoji %}{% if loop.index0 < 5 %}{{ e.emoji }}×{{ e.count }}&nbsp;&nbsp;{% endif %}{% endfor %}</dd>{% endif %}
+    {% if is_group %}<dt>Most active</dt><dd>{% for s in stats.per_sender %}{{ s.name }}: {{ s.count }}<br>{% endfor %}</dd>{% endif %}
+  </dl>
+</section>
+<div id="mb-charts" class="charts" aria-label="Charts"></div>
+{% endif %}
+<div class="searchbar">
+  <input id="mb-search" type="search" placeholder="Search messages…" autocomplete="off" aria-label="Search messages">
+  <div class="count" id="mb-count"></div>
+</div>
+{% if chapters %}
+<nav class="toc" aria-label="Chapters">
+  <div class="toc-title">Chapters</div>
+  {% for chapter in chapters %}<a href="#{{ chapter.id }}">{{ chapter.title }}</a>{% endfor %}
+</nav>
+{% endif %}
+<main>
+{% for chapter in chapters %}
+  <section id="{{ chapter.id }}">
+    <div class="chapter-title">{{ chapter.title }}</div>
+    {% for day in chapter.days %}
+      <div class="day-heading">{{ day.heading }}</div>
+      {% for m in day.messages %}
+        {% if m.system %}
+        <div class="system">{{ m.system }}</div>
+        {% else %}
+        {% if m.gap_before %}<div class="gap">{{ m.gap_before }}</div>{% endif %}
+        <div class="row {{ 'me' if m.from_me else 'them' }}">
+          {% if m.sender %}<div class="sender">{{ m.sender }}</div>{% endif %}
+          {% if m.reply_to %}<div class="reply">↩︎ {{ m.reply_to }}</div>
+          {% elif m.reply %}<div class="reply">↩︎ Reply</div>{% endif %}
+          {% for a in m.attachments -%}
+            {% if a.kind == "video" and a.video_src %}<video class="photo video" controls preload="metadata" playsinline{% if a.src %} poster="{{ a.src | safe }}"{% endif %}><source src="{{ a.video_src | safe }}"></video>
+            {%- elif a.kind == "video" and a.src %}<div class="photo-wrap"><img class="photo lb" src="{{ a.src | safe }}" alt="video"><span class="play"></span></div>
+            {%- elif a.web_src %}<img class="photo lb" src="{{ a.web_src | safe }}" alt="gif" loading="lazy">
+            {%- elif a.kind == "image" and a.src %}<img class="photo lb" src="{{ a.src | safe }}" alt="photo" loading="lazy">
+            {%- elif a.kind == "image" or a.kind == "video" %}{# a photo/video we couldn't embed: skip it rather than print a bare "Photo"/"Video" label #}
+            {%- else %}<div class="placeholder">{{ a.label }}{% if a.caption %} · {{ a.caption }}{% endif %}</div>
+            {%- endif %}
+          {%- endfor %}
+          {% if m.app or m.text %}<div class="bubble {{ m.service }}">{% if m.app %}<span class="app-tag">{{ m.app }}</span>{% endif %}{% if m.text %}<span class="text">{{ m.text }}</span>{% endif %}</div>{% endif %}
+          {% if m.tapbacks %}<div class="tapbacks">{% for t in m.tapbacks %}<span class="tapback">{{ t }}</span>{% endfor %}</div>{% endif %}
+          <div class="meta">{{ m.time }}{% if m.edited %} · <span class="edited">edited</span>{% endif %}{% if m.effect %} · <span class="effect">{{ m.effect }}</span>{% endif %}</div>
+        </div>
+        {% endif %}
+      {% endfor %}
+    {% endfor %}
+  </section>
+{% endfor %}
+</main>
+{% if gallery %}
+<section class="gallery">
+{% for src in gallery %}<img src="{{ src | safe }}" alt="photo">{% endfor %}
+</section>
+{% endif %}
+<div id="mb-lightbox" class="lightbox" hidden>
+  <button class="lb-close" type="button" aria-label="Close">&times;</button>
+  <button class="lb-prev" type="button" aria-label="Previous">&#8249;</button>
+  <img class="lb-img" src="" alt="">
+  <button class="lb-next" type="button" aria-label="Next">&#8250;</button>
+</div>
+<script>window.__MB_STATS__ = {{ stats_json | safe }};</script>
+<script>
+/* Live search over the message list. */
+(function () {
+  var input = document.getElementById('mb-search');
+  var count = document.getElementById('mb-count');
+  if (!input) return;
+  var items = Array.prototype.slice.call(document.querySelectorAll('main .row, main .system'));
+  var gaps = Array.prototype.slice.call(document.querySelectorAll('main .gap'));
+  var headings = Array.prototype.slice.call(document.querySelectorAll('main .day-heading'));
+
+  function apply() {
+    var q = input.value.trim().toLowerCase();
+    var shown = 0;
+    items.forEach(function (el) {
+      var match = !q || el.textContent.toLowerCase().indexOf(q) !== -1;
+      el.style.display = match ? '' : 'none';
+      if (match && q) shown++;
+    });
+    // Gaps are noise while filtering.
+    gaps.forEach(function (el) { el.style.display = q ? 'none' : ''; });
+    // Hide day headings whose messages are all filtered out.
+    headings.forEach(function (h) {
+      if (!q) { h.style.display = ''; return; }
+      var visible = false, n = h.nextElementSibling;
+      while (n && !n.classList.contains('day-heading') && !n.classList.contains('chapter-title')) {
+        if ((n.classList.contains('row') || n.classList.contains('system')) && n.style.display !== 'none') { visible = true; break; }
+        n = n.nextElementSibling;
+      }
+      h.style.display = visible ? '' : 'none';
+    });
+    count.textContent = q ? (shown + ' match' + (shown === 1 ? '' : 'es')) : '';
+  }
+  input.addEventListener('input', apply);
+})();
+</script>
+<script>
+/* Turn URLs and email addresses inside message bubbles into clickable links. Operates on
+   text nodes only, so it never touches the already-escaped markup around them. */
+(function () {
+  var URL = /(\bhttps?:\/\/[^\s<>]+|\bwww\.[^\s<>]+)/gi;
+  var EMAIL = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
+  function trimTrail(u) { return u.replace(/[.,!?;:'")\]}>]+$/, ''); }
+
+  function linkify(node) {
+    var text = node.nodeValue;
+    if (!text || (text.indexOf('http') === -1 && text.indexOf('www.') === -1 && text.indexOf('@') === -1)) return;
+    var matches = [], m;
+    URL.lastIndex = 0;
+    while ((m = URL.exec(text))) matches.push({ s: m.index, e: m.index + m[0].length, raw: m[0], email: false });
+    EMAIL.lastIndex = 0;
+    while ((m = EMAIL.exec(text))) matches.push({ s: m.index, e: m.index + m[0].length, raw: m[0], email: true });
+    if (!matches.length) return;
+    matches.sort(function (a, b) { return a.s - b.s; });
+    // Drop overlaps (e.g. an email captured inside a URL): keep the earliest.
+    var kept = [], end = -1;
+    matches.forEach(function (x) { if (x.s >= end) { kept.push(x); end = x.e; } });
+
+    var frag = document.createDocumentFragment(), last = 0;
+    kept.forEach(function (x) {
+      if (x.s > last) frag.appendChild(document.createTextNode(text.slice(last, x.s)));
+      var raw = trimTrail(x.raw), trail = x.raw.slice(raw.length);
+      var a = document.createElement('a');
+      if (x.email) {
+        a.href = 'mailto:' + raw;
+      } else {
+        a.href = raw.indexOf('http') === 0 ? raw : 'http://' + raw;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+      }
+      a.textContent = raw;
+      frag.appendChild(a);
+      if (trail) frag.appendChild(document.createTextNode(trail));
+      last = x.e;
+    });
+    if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+    node.parentNode.replaceChild(frag, node);
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('.bubble .text'), function (sp) {
+    Array.prototype.slice.call(sp.childNodes).forEach(function (k) {
+      if (k.nodeType === 3) linkify(k);
+    });
+  });
+})();
+</script>
+<script>
+/* Click any photo/GIF to open it full-screen; arrow keys or on-screen buttons page
+   through every image, Esc or a click on the backdrop closes it. */
+(function () {
+  var box = document.getElementById('mb-lightbox');
+  if (!box) return;
+  var img = box.querySelector('.lb-img');
+  var imgs = [], idx = 0;
+  var SEL = 'main img.lb, .gallery img';
+
+  function show(i) {
+    imgs = Array.prototype.slice.call(document.querySelectorAll(SEL));
+    if (!imgs.length) return;
+    idx = (i + imgs.length) % imgs.length;
+    var el = imgs[idx];
+    img.src = el.currentSrc || el.src;
+    img.alt = el.alt || '';
+    box.hidden = false;
+  }
+  function close() { box.hidden = true; img.removeAttribute('src'); }
+
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (t && t.matches && t.matches(SEL)) {
+      imgs = Array.prototype.slice.call(document.querySelectorAll(SEL));
+      show(imgs.indexOf(t));
+    }
+  });
+  box.querySelector('.lb-close').addEventListener('click', close);
+  box.querySelector('.lb-prev').addEventListener('click', function (e) { e.stopPropagation(); show(idx - 1); });
+  box.querySelector('.lb-next').addEventListener('click', function (e) { e.stopPropagation(); show(idx + 1); });
+  box.addEventListener('click', function (e) { if (e.target === box) close(); });
+  document.addEventListener('keydown', function (e) {
+    if (box.hidden) return;
+    if (e.key === 'Escape') close();
+    else if (e.key === 'ArrowLeft') show(idx - 1);
+    else if (e.key === 'ArrowRight') show(idx + 1);
+  });
+})();
+</script>
+<script>
+/* Dependency-free charts drawn as inline SVG from the embedded stats blob. */
+(function () {
+  var S = window.__MB_STATS__;
+  var mount = document.getElementById('mb-charts');
+  if (!S || !mount) return;
+
+  var css = getComputedStyle(document.documentElement);
+  function v(name, dflt) { var x = (css.getPropertyValue(name) || '').trim(); return x || dflt; }
+  var BLUE = v('--blue', '#0b93f6'), MUTED = v('--muted', '#8e8e93'), GREEN = v('--green', '#34c759');
+  var PALETTE = [BLUE, MUTED, GREEN, '#ff9f0a', '#bf5af2', '#ff375f', '#5ac8fa', '#ffd60a'];
+
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function maxOf(a) { return a.reduce(function (m, x) { return x > m ? x : m; }, 0); }
+  function sum(a) { return a.reduce(function (s, x) { return s + x; }, 0); }
+  function hourLabel(h) { var ap = h < 12 ? 'AM' : 'PM', hh = h % 12; if (hh === 0) hh = 12; return hh + ' ' + ap; }
+  function hourShort(h) { var ap = h < 12 ? 'a' : 'p', hh = h % 12; if (hh === 0) hh = 12; return hh + ap; }
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  function card(title, sub, body, cls) {
+    if (!body) return '';
+    return '<div class="chart-card' + (cls ? ' ' + cls : '') + '"><h3>' + esc(title) + '</h3>' +
+      '<div class="chart-body">' + body + '</div>' +
+      (sub ? '<p class="chart-sub">' + esc(sub) + '</p>' : '') + '</div>';
+  }
+
+  function svg(w, h, inner, cls) {
+    return '<svg class="' + (cls || 'mb-svg') + '" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="xMidYMid meet">' + inner + '</svg>';
+  }
+
+  function gridY(padL, padT, iw, ih, mx) {
+    var out = '';
+    [0, 0.5, 1].forEach(function (f) {
+      var y = padT + ih - ih * f;
+      out += '<line class="mb-grid" x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (padL + iw) + '" y2="' + y.toFixed(1) + '"></line>';
+      out += '<text class="mb-ylab" x="' + (padL - 4) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="end">' + Math.round(mx * f) + '</text>';
+    });
+    return out;
+  }
+
+  function barChart(values, labelFn, tipFn, color) {
+    var W = 620, H = 172, padL = 30, padR = 8, padT = 10, padB = 24;
+    var n = values.length, iw = W - padL - padR, ih = H - padT - padB, mx = maxOf(values) || 1, bw = iw / n;
+    var out = gridY(padL, padT, iw, ih, mx);
+    for (var i = 0; i < n; i++) {
+      var bh = values[i] / mx * ih, x = padL + i * bw, y = padT + ih - bh;
+      out += '<rect class="mb-bar" x="' + (x + bw * 0.14).toFixed(1) + '" y="' + y.toFixed(1) +
+        '" width="' + (bw * 0.72).toFixed(1) + '" height="' + Math.max(0, bh).toFixed(1) + '" rx="2" fill="' + color +
+        '" data-tip="' + esc(tipFn(i, values[i])) + '"></rect>';
+      var lab = labelFn(i, n);
+      if (lab) out += '<text class="mb-xlab" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle">' + esc(lab) + '</text>';
+    }
+    return svg(W, H, out);
+  }
+
+  function stackedArea(months) {
+    var W = 620, H = 184, padL = 30, padR = 8, padT = 10, padB = 26;
+    var n = months.length, iw = W - padL - padR, ih = H - padT - padB;
+    var mx = maxOf(months.map(function (m) { return m.total; })) || 1;
+    function xAt(i) { return n === 1 ? padL + iw / 2 : padL + iw * i / (n - 1); }
+    function yAt(val) { return padT + ih - val / mx * ih; }
+    function area(topFn, botFn) {
+      var d = '';
+      for (var i = 0; i < n; i++) d += (i ? ' L' : 'M') + xAt(i).toFixed(1) + ' ' + yAt(topFn(i)).toFixed(1);
+      for (var j = n - 1; j >= 0; j--) d += ' L' + xAt(j).toFixed(1) + ' ' + yAt(botFn(j)).toFixed(1);
+      return d + ' Z';
+    }
+    var out = gridY(padL, padT, iw, ih, mx);
+    out += '<path d="' + area(function (i) { return months[i].total; }, function (i) { return months[i].from_me; }) + '" fill="' + MUTED + '" opacity="0.32"></path>';
+    out += '<path d="' + area(function (i) { return months[i].from_me; }, function () { return 0; }) + '" fill="' + BLUE + '" opacity="0.5"></path>';
+    var line = '';
+    for (var i = 0; i < n; i++) line += (i ? ' L' : 'M') + xAt(i).toFixed(1) + ' ' + yAt(months[i].total).toFixed(1);
+    out += '<path d="' + line + '" fill="none" stroke="' + BLUE + '" stroke-width="1.5"></path>';
+    var step = Math.max(1, Math.ceil(n / 8));
+    for (var k = 0; k < n; k++) {
+      var w = n === 1 ? iw : iw / (n - 1);
+      var x0 = Math.max(padL, xAt(k) - w / 2);
+      out += '<rect x="' + x0.toFixed(1) + '" y="' + padT + '" width="' + Math.min(w, padL + iw - x0).toFixed(1) + '" height="' + ih +
+        '" fill="transparent" data-tip="' + esc(months[k].label + ': ' + months[k].total + ' (' + months[k].from_me + ' you / ' + months[k].from_others + ' them)') + '"></rect>';
+      if (k % step === 0) out += '<text class="mb-xlab" x="' + xAt(k).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle">' + esc(months[k].label) + '</text>';
+    }
+    return svg(W, H, out);
+  }
+
+  function heatmap(daily) {
+    if (!daily.length) return '';
+    var map = {}; daily.forEach(function (d) { map[d.date] = d.count; });
+    function parse(s) { var p = s.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); }
+    function fmt(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+    var start = parse(daily[0].date), end = parse(daily[daily.length - 1].date);
+    var cur = new Date(start); cur.setDate(cur.getDate() - cur.getDay());
+    var mx = maxOf(daily.map(function (d) { return d.count; })) || 1;
+    var lv = ['#ebedf0', '#c6e48b', '#7bc96f', '#239a3b', '#196127'];
+    function color(c) { if (!c) return lv[0]; return lv[Math.min(4, Math.max(1, Math.ceil(c / mx * 4)))]; }
+    var cell = 12, gap = 3, cells = '', months = '', week = 0, lastMonth = -1;
+    while (cur <= end && week < 520) {
+      for (var dow = 0; dow < 7; dow++) {
+        if (cur >= start && cur <= end) {
+          var key = fmt(cur), c = map[key] || 0;
+          cells += '<rect x="' + (week * (cell + gap)) + '" y="' + (dow * (cell + gap)) + '" width="' + cell + '" height="' + cell +
+            '" rx="2" fill="' + color(c) + '" data-tip="' + esc(key + ': ' + c + (c === 1 ? ' message' : ' messages')) + '"></rect>';
+        }
+        if (dow === 0 && cur.getDate() <= 7 && cur.getMonth() !== lastMonth && cur >= start) {
+          months += '<text class="mb-xlab" x="' + (week * (cell + gap)) + '" y="-4">' + MON[cur.getMonth()] + '</text>';
+          lastMonth = cur.getMonth();
+        }
+        cur.setDate(cur.getDate() + 1);
+      }
+      week++;
+    }
+    var W = week * (cell + gap), H = 7 * (cell + gap);
+    var wd = ''; [['Mon', 1], ['Wed', 3], ['Fri', 5]].forEach(function (p) {
+      wd += '<text class="mb-ylab" x="-6" y="' + (p[1] * (cell + gap) + cell - 2) + '" text-anchor="end">' + p[0] + '</text>';
+    });
+    return '<div class="mb-heat-scroll"><svg class="mb-heat" viewBox="-28 -16 ' + (W + 32) + ' ' + (H + 20) +
+      '" width="' + (W + 32) + '" height="' + (H + 20) + '">' + months + wd + cells + '</svg></div>';
+  }
+
+  function donut(segs) {
+    var total = sum(segs.map(function (s) { return s.value; })) || 1;
+    var r = 52, cx = 66, cy = 66, sw = 22, C = 2 * Math.PI * r, off = 0, arcs = '';
+    segs.forEach(function (s) {
+      if (s.value <= 0) return;
+      var len = s.value / total * C;
+      arcs += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + s.color + '" stroke-width="' + sw +
+        '" stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) + '" stroke-dashoffset="' + (-off).toFixed(2) +
+        '" transform="rotate(-90 ' + cx + ' ' + cy + ')" data-tip="' + esc(s.name + ': ' + s.value + ' (' + Math.round(s.value / total * 100) + '%)') + '"></circle>';
+      off += len;
+    });
+    var legend = segs.map(function (s) { return '<span class="mb-leg"><i style="background:' + s.color + '"></i>' + esc(s.name) + ' · ' + s.value + '</span>'; }).join('');
+    return '<div class="mb-donut-wrap"><svg class="mb-donut" viewBox="0 0 132 132">' + arcs +
+      '<text class="mb-donut-num" x="66" y="62" text-anchor="middle">' + total + '</text>' +
+      '<text class="mb-donut-lab" x="66" y="80" text-anchor="middle">messages</text></svg>' +
+      '<div class="mb-legend">' + legend + '</div></div>';
+  }
+
+  function emojiBars(top) {
+    if (!top.length) return '';
+    var mx = top[0].count || 1;
+    return '<div class="mb-emoji">' + top.slice(0, 10).map(function (e) {
+      return '<div class="mb-emoji-row"><span class="mb-emoji-g">' + esc(e.emoji) + '</span>' +
+        '<span class="mb-emoji-bar"><i style="width:' + (e.count / mx * 100).toFixed(1) + '%;background:' + BLUE + '"></i></span>' +
+        '<span class="mb-emoji-n">' + e.count + '</span></div>';
+    }).join('') + '</div>';
+  }
+
+  var html = '';
+
+  if (S.hourly && sum(S.hourly) > 0) {
+    var peak = 0, pi = 0;
+    S.hourly.forEach(function (c, i) { if (c > peak) { peak = c; pi = i; } });
+    html += card('When we text', 'Most active around ' + hourLabel(pi),
+      barChart(S.hourly, function (i) { return i % 3 === 0 ? hourShort(i) : ''; }, function (i, val) { return hourLabel(i) + ': ' + val; }, BLUE));
+  }
+
+  if (S.weekday && sum(S.weekday) > 0) {
+    var WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    html += card('Which days of the week', '',
+      barChart(S.weekday, function (i) { return WD[i]; }, function (i, val) { return WD[i] + ': ' + val; }, BLUE));
+  }
+
+  if (S.monthly && S.monthly.length >= 2) {
+    html += card('Messages over time', 'Blue = sent by you · gray = received', stackedArea(S.monthly), 'wide');
+  }
+
+  if (S.daily && S.daily.length > 0) {
+    html += card('Activity heatmap', 'Each square is one day; darker = busier', heatmap(S.daily), 'wide');
+  }
+
+  var segs;
+  if (S.per_sender && S.per_sender.length > 2) {
+    segs = S.per_sender.slice(0, 8).map(function (p, i) { return { name: p.name, value: p.count, color: PALETTE[i % PALETTE.length] }; });
+  } else {
+    segs = [{ name: 'You', value: S.from_me || 0, color: BLUE }, { name: 'Them', value: S.from_others || 0, color: MUTED }];
+  }
+  if (sum(segs.map(function (s) { return s.value; })) > 0) html += card('Who sent more', '', donut(segs));
+
+  if (S.top_emoji && S.top_emoji.length) html += card('Top emoji', '', emojiBars(S.top_emoji));
+
+  var ab = [['Photos', S.photos], ['Videos', S.videos], ['GIFs', S.gifs], ['Audio', S.audio], ['Links', S.links]]
+    .filter(function (x) { return x[1] > 0; });
+  if (ab.length) {
+    html += card('What we shared', '',
+      barChart(ab.map(function (x) { return x[1]; }), function (i) { return ab[i][0]; }, function (i, val) { return ab[i][0] + ': ' + val; }, GREEN));
+  }
+
+  mount.innerHTML = html;
+
+  // Shared hover tooltip driven by data-tip attributes.
+  var tip = document.createElement('div');
+  tip.className = 'mb-tip';
+  tip.style.display = 'none';
+  document.body.appendChild(tip);
+  mount.addEventListener('mousemove', function (e) {
+    var t = e.target && e.target.getAttribute ? e.target.getAttribute('data-tip') : null;
+    if (t) { tip.textContent = t; tip.style.display = 'block'; tip.style.left = e.clientX + 'px'; tip.style.top = e.clientY + 'px'; }
+    else tip.style.display = 'none';
+  });
+  mount.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
+})();
+</script>
+</body>
+</html>

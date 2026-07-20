@@ -1,0 +1,38 @@
+name: Formula
+
+# Keep the Homebrew formula valid. Runs only when the formula or its generator
+# changes, and re-derives the formula from the generator so the two can't drift.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Formula/imessage-book.rb"
+      - "scripts/update-formula.sh"
+      - ".github/workflows/formula.yml"
+  pull_request:
+    paths:
+      - "Formula/imessage-book.rb"
+      - "scripts/update-formula.sh"
+      - ".github/workflows/formula.yml"
+
+jobs:
+  lint:
+    name: brew style
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generator matches committed formula
+        # The committed formula must be exactly what scripts/update-formula.sh
+        # emits for its own version + checksums, so the release job can't produce
+        # a surprising diff. Re-derive it from the script and require no change.
+        run: |
+          set -euo pipefail
+          version="$(sed -nE 's/^  version "([^"]+)".*/\1/p' Formula/imessage-book.rb)"
+          arm="$(sed -nE '/aarch64-apple-darwin/{n;s/.*sha256 "([0-9a-f]{64})".*/\1/p;}' Formula/imessage-book.rb)"
+          intel="$(sed -nE '/x86_64-apple-darwin/{n;s/.*sha256 "([0-9a-f]{64})".*/\1/p;}' Formula/imessage-book.rb)"
+          cp Formula/imessage-book.rb /tmp/committed.rb
+          bash scripts/update-formula.sh "$version" "$arm" "$intel"
+          diff /tmp/committed.rb Formula/imessage-book.rb
+      - name: brew style
+        run: brew style Formula/imessage-book.rb

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8" />
+<title>{{ book.title }}</title>
+<link rel="stylesheet" type="text/css" href="style.css" />
+</head>
+<body>
+<h1 class="book-title">{{ book.title }}</h1>
+{% if book.author %}<div class="byline">Assembled by {{ book.author }}</div>{% endif %}
+{% if book.dedication %}<div class="dedication">{{ book.dedication }}</div>{% endif %}
+{% if book.stats %}
+<h2 class="chapter-title">By the numbers</h2>
+<dl class="stats">
+  <dt>Messages</dt><dd>{{ book.stats.total }} ({{ book.stats.from_me }} from you, {{ book.stats.from_others }} received)</dd>
+  <dt>Span</dt><dd>{{ book.stats.first_date }} &#8211; {{ book.stats.last_date }} ({{ book.stats.days }} day{{ 's' if book.stats.days != 1 else '' }})</dd>
+  <dt>Words sent</dt><dd>{{ book.stats.words }}</dd>
+  <dt>Photos</dt><dd>{{ book.stats.photos }}</dd>
+  {% if book.stats.busiest_day %}<dt>Busiest day</dt><dd>{{ book.stats.busiest_day }}</dd>{% endif %}
+  {% if book.stats.busiest_hour %}<dt>Busiest hour</dt><dd>{{ book.stats.busiest_hour }}</dd>{% endif %}
+  {% if book.stats.longest_streak > 1 %}<dt>Longest streak</dt><dd>{{ book.stats.longest_streak }} days</dd>{% endif %}
+  {% if book.stats.top_emoji %}<dt>Top emoji</dt><dd>{% for e in book.stats.top_emoji %}{{ e.emoji }}&#215;{{ e.count }}&#160;&#160;{% endfor %}</dd>{% endif %}
+  {% if book.is_group %}<dt>Most active</dt><dd>{% for s in book.stats.per_sender %}{{ s.name }}: {{ s.count }}<br />{% endfor %}</dd>{% endif %}
+</dl>
+{% endif %}
+</body>
+</html>

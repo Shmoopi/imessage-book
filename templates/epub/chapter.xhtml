@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8" />
+<title>{{ chapter.title }}</title>
+<link rel="stylesheet" type="text/css" href="style.css" />
+</head>
+<body>
+<h2 class="chapter-title">{{ chapter.title }}</h2>
+{% for day in chapter.days %}
+  <div class="day-heading">{{ day.heading }}</div>
+  {% for m in day.messages %}
+    {% if m.system %}
+      <div class="system">{{ m.system }}</div>
+    {% else %}
+      {% if m.gap_before %}<div class="gap">{{ m.gap_before }}</div>{% endif %}
+      <div class="row {{ 'me' if m.from_me else 'them' }}">
+        {% if m.sender %}<div class="sender">{{ m.sender }}</div>{% endif %}
+        <div class="bubble {{ m.service }}">
+          {% if m.reply_to %}<div class="reply">&#8617; {{ m.reply_to }}</div>
+          {% elif m.reply %}<div class="reply">&#8617; Reply</div>{% endif %}
+          {% if m.app %}<div class="app-tag">{{ m.app }}</div>{% endif %}
+          {% for a in m.attachments %}
+            {% if a.src and a.kind in ["image", "video"] %}<img src="{{ a.src | safe }}" alt="{{ a.label }}" />{% if a.caption %}<div class="caption">{{ a.caption }}</div>{% endif %}
+            {% else %}<div class="placeholder">&#128206; {{ a.label }}{% if a.caption %} &#8212; {{ a.caption }}{% endif %}</div>{% endif %}
+          {% endfor %}
+          {% if m.text %}{{ m.text }}{% endif %}
+        </div>
+        <div class="meta">{{ m.time }}{% if m.edited %} &#183; edited{% endif %}{% if m.effect %} &#183; {{ m.effect }}{% endif %}</div>
+        {% if m.tapbacks %}<div class="tapbacks">{% for t in m.tapbacks %}<span class="tapback">{{ t }}</span>{% endfor %}</div>{% endif %}
+      </div>
+    {% endif %}
+  {% endfor %}
+{% endfor %}
+</body>
+</html>

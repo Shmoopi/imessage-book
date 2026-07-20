@@ -1,0 +1,285 @@
+name: Release
+
+# Build the macOS CLI binaries and the guided macOS app, publish a GitHub Release,
+# and update the Homebrew formula — all driven by pushing a version tag.
+#
+#   1. bump `version` in Cargo.toml (and commit Cargo.lock)
+#   2. git tag vX.Y.Z && git push origin vX.Y.Z
+#
+# The tag must match the Cargo.toml version (the `setup` job enforces this).
+# `workflow_dispatch` re-runs the pipeline for an existing tag without retagging.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)build, e.g. v0.3.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  BINARY: imessage-book
+
+jobs:
+  # Resolve the tag/version once so every downstream job agrees, and fail fast
+  # if the tag doesn't match the version in Cargo.toml.
+  setup:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          VERSION="${TAG#v}"
+          CARGO_VERSION="$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')"
+          if [ "$VERSION" != "$CARGO_VERSION" ]; then
+            echo "::error::Tag $TAG (version $VERSION) does not match Cargo.toml version $CARGO_VERSION." \
+                 "Bump Cargo.toml, commit, then tag."
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing **$TAG** (version \`$VERSION\`)" >> "$GITHUB_STEP_SUMMARY"
+
+  # Build a release binary per macOS architecture on a native runner, then
+  # package it into a tarball + .sha256 uploaded as a build artifact.
+  build:
+    name: Build ${{ matrix.target }}
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-14 # Apple Silicon runner
+          - target: x86_64-apple-darwin
+            os: macos-13 # Intel runner
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup.outputs.tag }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Smoke test
+        # Each target's runner is that same architecture, so the binary runs natively.
+        run: ./target/${{ matrix.target }}/release/${BINARY} --version
+      - name: Package
+        id: package
+        env:
+          VERSION: ${{ needs.setup.outputs.version }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          stage="$(mktemp -d)"
+          cp "target/${TARGET}/release/${BINARY}" "$stage/"
+          strip "$stage/${BINARY}" || true
+          cp README.md "$stage/" 2>/dev/null || true
+          [ -f LICENSE ] && cp LICENSE "$stage/"
+          mkdir -p dist
+          archive="${BINARY}-${VERSION}-${TARGET}.tar.gz"
+          tar -czf "dist/${archive}" -C "$stage" .
+          sha="$(shasum -a 256 "dist/${archive}" | awk '{print $1}')"
+          echo "${sha}  ${archive}" > "dist/${archive}.sha256"
+          {
+            echo "### ${TARGET}"
+            echo "- \`${archive}\`"
+            echo "- sha256: \`${sha}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  # Build the guided macOS app once as a universal binary (native Apple Silicon runner
+  # with both targets installed) and package it as a drag-to-Applications .dmg and a .zip,
+  # each with a .sha256. The app bundles the engine, so users need nothing else.
+  #
+  # When the signing secrets are configured (see the README's "Signing & notarization"
+  # section) the app is Developer ID-signed and notarized so Gatekeeper opens it without a
+  # prompt; without them it falls back to an ad-hoc signature so forks still build.
+  app:
+    name: Build macOS app
+    needs: setup
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup.outputs.tag }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: macos-app
+
+      # Import the Developer ID certificate into a throwaway keychain and discover the
+      # identity string. Emits identity="-" (ad-hoc) when no certificate is configured.
+      - name: Import signing certificate
+        id: signing
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MACOS_CERTIFICATE_P12:-}" ]; then
+            echo "No signing certificate configured — using an ad-hoc signature."
+            echo "identity=-" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          kpwd="$(openssl rand -base64 24)"
+          security create-keychain -p "$kpwd" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$kpwd" "$keychain"
+          echo "$MACOS_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MACOS_CERTIFICATE_PWD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$kpwd" "$keychain" >/dev/null
+          # Put our keychain first in the search list so codesign finds the identity.
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          identity="$(security find-identity -v -p codesigning "$keychain" \
+            | awk -F'"' '/Developer ID Application/{print $2; exit}')"
+          if [ -z "$identity" ]; then
+            echo "::error::No 'Developer ID Application' identity found in MACOS_CERTIFICATE_P12."
+            exit 1
+          fi
+          echo "Signing identity: $identity"
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+      - name: Build universal .app
+        env:
+          CODESIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
+        run: scripts/build-app.sh
+
+      # Materialize the App Store Connect API key that notarytool uses. Emits key="" when
+      # no notarization key is configured (then packaging skips notarization).
+      - name: Prepare notarization key
+        id: notary
+        env:
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APPLE_API_KEY_P8:-}" ]; then
+            echo "No notarization key configured — skipping notarization."
+            echo "key=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "$APPLE_API_KEY_P8" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
+          echo "key=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_OUTPUT"
+
+      - name: Package DMG + zip
+        env:
+          VERSION: ${{ needs.setup.outputs.version }}
+          # Notarize only when we have both a real signature and a notary key.
+          NOTARIZE: ${{ (steps.signing.outputs.identity != '-' && steps.notary.outputs.key != '') && '1' || '0' }}
+          NOTARY_KEY: ${{ steps.notary.outputs.key }}
+          NOTARY_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          # Fail loudly if the engine isn't actually universal.
+          lipo -info dist/ImessageBook.app/Contents/Resources/imessage-book
+          scripts/package-macos-app.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-app
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
+
+  # Gather every artifact and publish the GitHub Release.
+  release:
+    name: Publish release
+    needs: [setup, build, app]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Aggregate checksums
+        run: |
+          set -euo pipefail
+          cd dist
+          cat ./*.sha256 | sort > SHA256SUMS
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat SHA256SUMS >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.setup.outputs.tag }}
+          name: ${{ needs.setup.outputs.tag }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.tar.gz
+            dist/*.dmg
+            dist/*.zip
+            dist/*.sha256
+            dist/SHA256SUMS
+
+  # Regenerate Formula/imessage-book.rb with the new version + real checksums and
+  # commit it to the default branch, so `brew upgrade` picks up the release.
+  formula:
+    name: Update Homebrew formula
+    needs: [setup, build, release]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Regenerate formula
+        env:
+          VERSION: ${{ needs.setup.outputs.version }}
+        run: |
+          set -euo pipefail
+          sha_of() { awk '{print $1}' "dist/${BINARY}-${VERSION}-$1-apple-darwin.tar.gz.sha256"; }
+          bash scripts/update-formula.sh "$VERSION" "$(sha_of aarch64)" "$(sha_of x86_64)"
+      - name: Commit
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- Formula/imessage-book.rb; then
+            echo "Formula already up to date; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/imessage-book.rb
+          git commit -m "chore(release): update Homebrew formula to ${{ needs.setup.outputs.version }}"
+          git push origin "HEAD:${{ github.event.repository.default_branch }}"
